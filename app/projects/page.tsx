@@ -1,18 +1,20 @@
 import { BarChart3, CalendarDays, Clock3, Users } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
+import { ProjectUpdateForm } from '@/components/project-update-form';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getProjectStats } from '@/db/service';
+import { getProjectStats, listProjects } from '@/db/service';
 import { formatDate } from '@/lib/dates';
+import { teamMembers } from '@/lib/projects';
 import { getPageViewer } from '@/lib/viewer';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProjectsPage() {
   const viewer = await getPageViewer('/projects');
-  const projects = await getProjectStats();
+  const [projects, projectList] = await Promise.all([getProjectStats(), listProjects()]);
   const regularTotal = projects.reduce((sum, project) => sum + Number(project.regular_hours), 0);
   const overtimeTotal = projects.reduce((sum, project) => sum + Number(project.overtime_hours), 0);
   const nextWeekTotal = projects.reduce((sum, project) => sum + Number(project.next_week_hours), 0);
@@ -32,6 +34,24 @@ export default async function ProjectsPage() {
           <Metric icon={Clock3} label="累計加班工時" value={`${overtimeTotal} h`} urgent={overtimeTotal > 0} />
           <Metric icon={CalendarDays} label="下週預估投入" value={`${nextWeekTotal} h`} />
         </section>
+
+        <Card className="mt-6 border-0 shadow-[0_14px_40px_rgb(18_42_66/6%)] ring-border/80">
+          <CardHeader>
+            <CardTitle>更新客戶／重要工作進度</CardTitle>
+            <CardDescription>活動日期異動後，月份配置表與近期排序會自動重排；系統同時保留登入者的更新紀錄。</CardDescription>
+          </CardHeader>
+          <CardContent><ProjectUpdateForm projects={projectList} /></CardContent>
+        </Card>
+
+        <Card className="mt-6 border-0 shadow-[0_14px_40px_rgb(18_42_66/6%)] ring-border/80">
+          <CardHeader>
+            <CardTitle>年度人力配置大表</CardTitle>
+            <CardDescription>縱軸為人員、橫軸為月份；專案依活動日自動落在對應月份。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WorkloadMatrix projects={projectList} />
+          </CardContent>
+        </Card>
 
         <Card className="mt-6 border-0 shadow-[0_14px_40px_rgb(18_42_66/6%)] ring-border/80">
           <CardHeader>
@@ -60,6 +80,7 @@ export default async function ProjectsPage() {
                       <TableCell>
                         <p className="max-w-96 truncate font-semibold">{project.name}</p>
                         <p className="mt-1 text-xs text-muted-foreground">{project.client} · {project.status}</p>
+                        {project.progress_note && <p className="mt-1 max-w-96 truncate text-xs font-medium text-primary">{project.progress_note}</p>}
                       </TableCell>
                       <TableCell><Badge variant="outline">{project.pm_name}</Badge></TableCell>
                       <TableCell className={!project.activity_date ? 'font-medium text-amber-700' : ''}>{formatDate(project.activity_date)}</TableCell>
@@ -81,6 +102,37 @@ export default async function ProjectsPage() {
         </Card>
       </main>
     </AppShell>
+  );
+}
+
+function WorkloadMatrix({ projects }: { projects: Awaited<ReturnType<typeof listProjects>> }) {
+  const months = Array.from({ length: 12 }, (_, index) => index + 1);
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="grid min-w-[1500px] grid-cols-[120px_repeat(12,minmax(104px,1fr))_110px]">
+        <div className="matrix-head sticky left-0 z-10">人員</div>
+        {months.map((month) => <div key={month} className="matrix-head justify-center">{month} 月</div>)}
+        <div className="matrix-head justify-center">未排定</div>
+        {teamMembers.map((member) => (
+          <div key={member} className="contents">
+            <div className="matrix-name sticky left-0 z-10">{member}</div>
+            {months.map((month) => {
+              const items = projects.filter((project) => project.pmName === member && project.activityDate && Number(project.activityDate.slice(5, 7)) === month);
+              return <MatrixCell key={`${member}-${month}`} items={items} />;
+            })}
+            <MatrixCell items={projects.filter((project) => project.pmName === member && !project.activityDate)} warning />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MatrixCell({ items, warning = false }: { items: Awaited<ReturnType<typeof listProjects>>; warning?: boolean }) {
+  return (
+    <div className={`matrix-cell ${warning && items.length ? 'bg-amber-50' : ''}`}>
+      {items.map((item) => <span key={item.id} title={`${item.name}｜${item.client}｜${item.status}`} className={`matrix-chip ${warning ? 'border-amber-200 bg-amber-100 text-amber-800' : ''}`}>{item.name}</span>)}
+    </div>
   );
 }
 

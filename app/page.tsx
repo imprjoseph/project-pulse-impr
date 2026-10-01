@@ -71,7 +71,7 @@ export default async function Home() {
               {focusProjects.map((project) => (
                 <div key={project.id} className="group flex items-center gap-4 rounded-xl px-2 py-3 hover:bg-muted/55">
                   <div className={`grid size-11 shrink-0 place-items-center rounded-xl text-xs font-bold ${project.activityDate ? 'bg-primary/8 text-primary' : 'bg-amber-100 text-amber-700'}`}>{formatDate(project.activityDate)}</div>
-                  <div className="min-w-0 flex-1"><p className="truncate font-semibold">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.client} · PM {project.pmName} · {project.status}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate font-semibold">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{project.client} · PM {project.pmName} · {project.status}</p>{project.progressNote && <p className="mt-1 truncate text-xs font-medium text-primary">{project.progressNote}</p>}</div>
                   <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                 </div>
               ))}

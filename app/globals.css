@@ -87,6 +87,10 @@
   .mobile-nav-link { @apply flex flex-col items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-semibold text-muted-foreground; }
   .mobile-nav-link-active { @apply text-primary; }
   .metric-card { @apply bg-card shadow-[0_10px_30px_rgb(18_42_66/5%)]; }
+  .matrix-head { @apply flex min-h-11 items-center border-r border-b border-border bg-muted px-3 text-xs font-bold; }
+  .matrix-name { @apply flex min-h-16 items-start border-r border-b border-border bg-card px-3 py-3 text-sm font-bold; }
+  .matrix-cell { @apply min-h-16 space-y-1 border-r border-b border-border bg-card p-1.5; }
+  .matrix-chip { @apply block rounded-md border border-primary/15 bg-primary/[.07] px-2 py-1.5 text-[10px] font-medium leading-4 text-primary; }
 }
 
 .workload-danger { background: oklch(.63 .19 25); }

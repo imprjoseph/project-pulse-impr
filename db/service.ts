@@ -10,6 +10,8 @@ export type Project = {
   activityDate: string | null;
   pmName: string;
   status: string;
+  progressNote: string;
+  updatedByEmail: string;
 };
 
 export type WorkLogInput = {
@@ -41,6 +43,8 @@ type ProjectRow = {
   activity_date: string | null;
   pm_name: string;
   status: string;
+  progress_note: string;
+  updated_by_email: string;
 };
 
 let ready: Promise<void> | null = null;
@@ -60,7 +64,13 @@ async function initializeDatabase() {
   await d1.batch([
     d1.prepare(`CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, client TEXT NOT NULL DEFAULT '', activity_date TEXT,
-      pm_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT '進行中', created_at INTEGER NOT NULL
+      pm_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT '進行中', progress_note TEXT NOT NULL DEFAULT '',
+      updated_by_email TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+    )`),
+    d1.prepare(`CREATE TABLE IF NOT EXISTS project_updates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL REFERENCES projects(id),
+      activity_date TEXT, status TEXT NOT NULL, progress_note TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL, user_email TEXT NOT NULL, user_name TEXT NOT NULL, created_at INTEGER NOT NULL
     )`),
     d1.prepare(`CREATE TABLE IF NOT EXISTS weekly_reports (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_email TEXT NOT NULL, user_name TEXT NOT NULL,
@@ -82,14 +92,20 @@ async function initializeDatabase() {
     d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_project_week ON work_logs(project_id, week_start)'),
     d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_user_week ON work_logs(user_id, week_start)'),
     d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_report ON work_logs(report_id)'),
+    d1.prepare('CREATE INDEX IF NOT EXISTS idx_project_updates_project ON project_updates(project_id, created_at)'),
   ]);
+
+  const projectColumns = await d1.prepare('PRAGMA table_info(projects)').all<{ name: string }>();
+  const existingColumns = new Set(projectColumns.results.map((column) => column.name));
+  if (!existingColumns.has('progress_note')) await d1.prepare("ALTER TABLE projects ADD COLUMN progress_note TEXT NOT NULL DEFAULT ''").run();
+  if (!existingColumns.has('updated_by_email')) await d1.prepare("ALTER TABLE projects ADD COLUMN updated_by_email TEXT NOT NULL DEFAULT ''").run();
+  if (!existingColumns.has('updated_at')) await d1.prepare('ALTER TABLE projects ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0').run();
 
   const now = Math.floor(Date.now() / 1000);
   await d1.batch(projectSeeds.map((project) => d1.prepare(
     `INSERT INTO projects (id, name, client, activity_date, pm_name, status, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET name=excluded.name, client=excluded.client,
-       activity_date=excluded.activity_date, pm_name=excluded.pm_name, status=excluded.status`,
+     ON CONFLICT(id) DO UPDATE SET name=excluded.name, client=excluded.client, pm_name=excluded.pm_name`,
   ).bind(project.id, project.name, project.client, project.activityDate, project.pmName, project.status, now)));
   await d1.prepare('PRAGMA optimize').run();
 }
@@ -97,7 +113,7 @@ async function initializeDatabase() {
 export async function listProjects(): Promise<Project[]> {
   await ensureDatabase();
   const result = await db().prepare(
-    `SELECT id, name, client, activity_date, pm_name, status
+    `SELECT id, name, client, activity_date, pm_name, status, progress_note, updated_by_email
      FROM projects ORDER BY CASE WHEN activity_date IS NULL THEN 1 ELSE 0 END, activity_date, name`,
   ).all<ProjectRow>();
   return result.results.map((row) => ({
@@ -107,7 +123,23 @@ export async function listProjects(): Promise<Project[]> {
     activityDate: row.activity_date,
     pmName: row.pm_name,
     status: row.status,
+    progressNote: row.progress_note,
+    updatedByEmail: row.updated_by_email,
   }));
+}
+
+export async function updateProject(viewer: Viewer, projectId: string, input: { activityDate: string | null; status: string; progressNote: string }) {
+  await ensureDatabase();
+  const d1 = db();
+  const now = Math.floor(Date.now() / 1000);
+  const result = await d1.batch([
+    d1.prepare(`UPDATE projects SET activity_date = ?, status = ?, progress_note = ?, updated_by_email = ?, updated_at = ? WHERE id = ?`)
+      .bind(input.activityDate, input.status, input.progressNote, viewer.email, now, projectId),
+    d1.prepare(`INSERT INTO project_updates (project_id, activity_date, status, progress_note, user_id, user_email, user_name, created_at)
+      SELECT id, ?, ?, ?, ?, ?, ?, ? FROM projects WHERE id = ?`)
+      .bind(input.activityDate, input.status, input.progressNote, viewer.userId, viewer.email, viewer.displayName, now, projectId),
+  ]);
+  return result;
 }
 
 export async function saveWeeklyReport(viewer: Viewer, input: WeeklyReportInput) {
@@ -160,7 +192,7 @@ export async function getUserReports(userId: string) {
 export async function getProjectStats() {
   await ensureDatabase();
   const result = await db().prepare(
-    `SELECT p.id, p.name, p.client, p.activity_date, p.pm_name, p.status,
+    `SELECT p.id, p.name, p.client, p.activity_date, p.pm_name, p.status, p.progress_note, p.updated_by_email,
       COALESCE(SUM(w.regular_hours), 0) AS regular_hours,
       COALESCE(SUM(w.overtime_hours), 0) AS overtime_hours,
       COALESCE(SUM(w.next_week_hours), 0) AS next_week_hours,
@@ -171,6 +203,7 @@ export async function getProjectStats() {
        CASE WHEN p.activity_date IS NULL THEN 1 ELSE 0 END, p.activity_date`,
   ).all<{
     id: string; name: string; client: string; activity_date: string | null; pm_name: string; status: string;
+    progress_note: string; updated_by_email: string;
     regular_hours: number; overtime_hours: number; next_week_hours: number; contributor_count: number; report_count: number;
   }>();
   return result.results;

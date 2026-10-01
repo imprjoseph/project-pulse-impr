@@ -8,6 +8,13 @@
       "when": 1790816516162,
       "tag": "0000_stale_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790816872312,
+      "tag": "0001_brainy_talisman",
+      "breakpoints": true
     }
   ]
 }

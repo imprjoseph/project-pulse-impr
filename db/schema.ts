@@ -7,8 +7,27 @@ export const projects = sqliteTable('projects', {
   activityDate: text('activity_date'),
   pmName: text('pm_name').notNull(),
   status: text('status').notNull().default('進行中'),
+  progressNote: text('progress_note').notNull().default(''),
+  updatedByEmail: text('updated_by_email').notNull().default(''),
+  updatedAt: integer('updated_at').notNull().default(0),
   createdAt: integer('created_at').notNull(),
 });
+
+export const projectUpdates = sqliteTable(
+  'project_updates',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectId: text('project_id').notNull().references(() => projects.id),
+    activityDate: text('activity_date'),
+    status: text('status').notNull(),
+    progressNote: text('progress_note').notNull().default(''),
+    userId: text('user_id').notNull(),
+    userEmail: text('user_email').notNull(),
+    userName: text('user_name').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [index('idx_project_updates_project').on(table.projectId, table.createdAt)],
+);
 
 export const weeklyReports = sqliteTable(
   'weekly_reports',
