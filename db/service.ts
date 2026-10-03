@@ -1,6 +1,5 @@
 import { env } from 'cloudflare:workers';
 
-import { projectSeeds } from '@/lib/projects';
 import type { Viewer } from '@/lib/viewer';
 
 export type Project = {
@@ -47,67 +46,13 @@ type ProjectRow = {
   updated_by_email: string;
 };
 
-let ready: Promise<void> | null = null;
-
 function db() {
   if (!env.DB) throw new Error('Database binding is unavailable.');
   return env.DB;
 }
 
 export function ensureDatabase() {
-  if (!ready) ready = initializeDatabase().catch((error) => { ready = null; throw error; });
-  return ready;
-}
-
-async function initializeDatabase() {
-  const d1 = db();
-  await d1.batch([
-    d1.prepare(`CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, client TEXT NOT NULL DEFAULT '', activity_date TEXT,
-      pm_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT '進行中', progress_note TEXT NOT NULL DEFAULT '',
-      updated_by_email TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
-    )`),
-    d1.prepare(`CREATE TABLE IF NOT EXISTS project_updates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL REFERENCES projects(id),
-      activity_date TEXT, status TEXT NOT NULL, progress_note TEXT NOT NULL DEFAULT '',
-      user_id TEXT NOT NULL, user_email TEXT NOT NULL, user_name TEXT NOT NULL, created_at INTEGER NOT NULL
-    )`),
-    d1.prepare(`CREATE TABLE IF NOT EXISTS weekly_reports (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_email TEXT NOT NULL, user_name TEXT NOT NULL,
-      week_start TEXT NOT NULL, highlights TEXT NOT NULL DEFAULT '', blockers TEXT NOT NULL DEFAULT '',
-      next_week_focus TEXT NOT NULL DEFAULT '', submitted_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-      UNIQUE(user_id, week_start)
-    )`),
-    d1.prepare(`CREATE TABLE IF NOT EXISTS work_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, report_id TEXT NOT NULL REFERENCES weekly_reports(id) ON DELETE CASCADE,
-      user_id TEXT NOT NULL, user_email TEXT NOT NULL, week_start TEXT NOT NULL,
-      project_id TEXT NOT NULL REFERENCES projects(id), task_name TEXT NOT NULL, category TEXT NOT NULL,
-      regular_hours REAL NOT NULL DEFAULT 0, overtime_hours REAL NOT NULL DEFAULT 0,
-      overtime_reason TEXT NOT NULL DEFAULT '', progress TEXT NOT NULL DEFAULT '',
-      difficulty_type TEXT NOT NULL DEFAULT '無', difficulty_note TEXT NOT NULL DEFAULT '',
-      support_needed TEXT NOT NULL DEFAULT '', next_week_hours REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
-    )`),
-    d1.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_reports_user_week ON weekly_reports(user_id, week_start)'),
-    d1.prepare('CREATE INDEX IF NOT EXISTS idx_weekly_reports_week ON weekly_reports(week_start)'),
-    d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_project_week ON work_logs(project_id, week_start)'),
-    d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_user_week ON work_logs(user_id, week_start)'),
-    d1.prepare('CREATE INDEX IF NOT EXISTS idx_work_logs_report ON work_logs(report_id)'),
-    d1.prepare('CREATE INDEX IF NOT EXISTS idx_project_updates_project ON project_updates(project_id, created_at)'),
-  ]);
-
-  const projectColumns = await d1.prepare('PRAGMA table_info(projects)').all<{ name: string }>();
-  const existingColumns = new Set(projectColumns.results.map((column) => column.name));
-  if (!existingColumns.has('progress_note')) await d1.prepare("ALTER TABLE projects ADD COLUMN progress_note TEXT NOT NULL DEFAULT ''").run();
-  if (!existingColumns.has('updated_by_email')) await d1.prepare("ALTER TABLE projects ADD COLUMN updated_by_email TEXT NOT NULL DEFAULT ''").run();
-  if (!existingColumns.has('updated_at')) await d1.prepare('ALTER TABLE projects ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0').run();
-
-  const now = Math.floor(Date.now() / 1000);
-  await d1.batch(projectSeeds.map((project) => d1.prepare(
-    `INSERT INTO projects (id, name, client, activity_date, pm_name, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET name=excluded.name, client=excluded.client, pm_name=excluded.pm_name`,
-  ).bind(project.id, project.name, project.client, project.activityDate, project.pmName, project.status, now)));
-  await d1.prepare('PRAGMA optimize').run();
+  return Promise.resolve();
 }
 
 export async function listProjects(): Promise<Project[]> {

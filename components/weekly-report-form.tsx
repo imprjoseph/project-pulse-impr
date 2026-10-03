@@ -142,10 +142,10 @@ export function WeeklyReportForm({ projects, weekStart }: { projects: Project[];
                 <Input value={entry.taskName} onChange={(event) => updateEntry(index, { taskName: event.target.value })} maxLength={200} placeholder="例：完成議程定稿與三位講者確認" />
               </Field>
               <Field label="正常工時">
-                <Input type="number" min={0} max={80} step={0.5} value={entry.regularHours} onChange={(event) => updateEntry(index, { regularHours: Number(event.target.value) })} />
+                <Input type="number" min={0} max={80} step={0.5} value={entry.regularHours || ''} placeholder="0" onChange={(event) => updateEntry(index, { regularHours: Number(event.target.value) })} />
               </Field>
               <Field label="加班工時">
-                <Input type="number" min={0} max={40} step={0.5} value={entry.overtimeHours} onChange={(event) => updateEntry(index, { overtimeHours: Number(event.target.value) })} />
+                <Input type="number" min={0} max={40} step={0.5} value={entry.overtimeHours || ''} placeholder="0" onChange={(event) => updateEntry(index, { overtimeHours: Number(event.target.value) })} />
               </Field>
               <Field label="加班原因">
                 <NativeSelect className="w-full" value={entry.overtimeReason} onChange={(event) => updateEntry(index, { overtimeReason: event.target.value })}>
@@ -154,7 +154,7 @@ export function WeeklyReportForm({ projects, weekStart }: { projects: Project[];
                 </NativeSelect>
               </Field>
               <Field label="下週預估工時">
-                <Input type="number" min={0} max={80} step={0.5} value={entry.nextWeekHours} onChange={(event) => updateEntry(index, { nextWeekHours: Number(event.target.value) })} />
+                <Input type="number" min={0} max={80} step={0.5} value={entry.nextWeekHours || ''} placeholder="0" onChange={(event) => updateEntry(index, { nextWeekHours: Number(event.target.value) })} />
               </Field>
               <Field label="困難類型">
                 <NativeSelect className="w-full" value={entry.difficultyType} onChange={(event) => updateEntry(index, { difficultyType: event.target.value })}>

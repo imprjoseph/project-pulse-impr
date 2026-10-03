@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, Clock3, FolderKanban, Users } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
@@ -32,7 +31,7 @@ export default async function Home() {
             <h1 className="font-heading text-3xl font-bold tracking-tight sm:text-4xl">先看負載，再排工作。</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">同仁只需在網頁回報工時與困難點；專案底稿維持後台管理，不開放直接共筆。</p>
           </div>
-          <Button size="lg" render={<Link href="/weekly" />} className="h-11 px-4 shadow-sm">填寫本週週報<ArrowRight data-icon="inline-end" /></Button>
+          <Button size="lg" render={<a href="/weekly" />} className="h-11 px-4 shadow-sm">填寫本週週報<ArrowRight data-icon="inline-end" /></Button>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="本週摘要">
@@ -81,7 +80,7 @@ export default async function Home() {
 
         <section className="mt-6 rounded-2xl bg-[linear-gradient(120deg,oklch(.34_.07_230),oklch(.43_.1_203))] px-5 py-5 text-white shadow-lg sm:flex sm:items-center sm:justify-between sm:px-7">
           <div><p className="font-heading text-lg font-bold">週報不是打卡，是提早看見阻礙。</p><p className="mt-1 text-sm text-white/75">請同仁每週回報投入工項、加班原因與需要的協助。</p></div>
-          <Button className="mt-4 bg-white text-slate-800 hover:bg-white/90 sm:mt-0" render={<Link href="/weekly" />}>開始填寫<CheckCircle2 /></Button>
+          <Button className="mt-4 bg-white text-slate-800 hover:bg-white/90 sm:mt-0" render={<a href="/weekly" />}>開始填寫<CheckCircle2 /></Button>
         </section>
       </main>
     </AppShell>
