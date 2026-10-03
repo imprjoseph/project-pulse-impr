@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head><meta charset="utf-8"><meta name="robots" content="noindex"><title>Project Pulse API</title></head>
+  <body>
+    <script>
+      const allowedOrigins = new Set(['https://imprjoseph.github.io', 'http://localhost:4173', 'http://127.0.0.1:4173']);
+      window.addEventListener('message', (event) => {
+        if (!allowedOrigins.has(event.origin) || !event.data || event.data.type !== 'PROJECT_PULSE_REQUEST') return;
+        const requestId = event.data.requestId;
+        google.script.run
+          .withSuccessHandler((result) => event.source.postMessage({ type: 'PROJECT_PULSE_RESPONSE', requestId, ok: true, result }, event.origin))
+          .withFailureHandler((error) => event.source.postMessage({ type: 'PROJECT_PULSE_RESPONSE', requestId, ok: false, error: error && error.message ? error.message : '後端服務暫時無法使用' }, event.origin))
+          .apiCall(event.data.request);
+      });
+      parent.postMessage({ type: 'PROJECT_PULSE_READY' }, '*');
+    </script>
+  </body>
+</html>
