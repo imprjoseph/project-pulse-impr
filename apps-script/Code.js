@@ -8,6 +8,133 @@ const SHEETS = {
 };
 const SESSION_SECONDS = 21600;
 
+const PROJECT_SHEET_NAME_PATTERN = /^\d{3}_/;
+const PROJECT_HEADER_ROW = 6;
+const PROJECT_FIRST_DATA_ROW = 7;
+const PROJECT_SYSTEM_COLUMN_COUNT = 3;
+const PROJECT_LAST_COLUMN = 23;
+const PROJECT_FORMAT_REFERENCE_SHEET = '013_國土署個資教育訓';
+
+/**
+ * Keep every per-project sheet consistent when the workbook is opened.
+ * The structural-change trigger installed by installProjectSheetAutomation()
+ * also runs this immediately after a project sheet is created or renamed.
+ */
+function onOpen() {
+  normalizeProjectSheets_();
+}
+
+function installProjectSheetAutomation() {
+  const handler = 'onProjectStructureChange_';
+  ScriptApp.getProjectTriggers()
+    .filter((trigger) => trigger.getHandlerFunction() === handler)
+    .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger(handler)
+    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .onChange()
+    .create();
+  normalizeProjectSheets_();
+  return '專案分頁自動整理已啟用';
+}
+
+function onProjectStructureChange_() {
+  normalizeProjectSheets_();
+}
+
+/**
+ * When a user starts entering a work item in columns D:W, generate the hidden
+ * system fields in A:C. Existing task IDs are never replaced.
+ */
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (!isProjectSheet_(sheet)) return;
+
+  normalizeProjectSheet_(sheet);
+  if (e.range.getLastRow() < PROJECT_FIRST_DATA_ROW ||
+      e.range.getColumn() > PROJECT_LAST_COLUMN ||
+      e.range.getLastColumn() < 4) return;
+
+  const firstRow = Math.max(PROJECT_FIRST_DATA_ROW, e.range.getRow());
+  const lastRow = e.range.getLastRow();
+  fillProjectSystemColumns_(sheet, firstRow, lastRow);
+}
+
+function normalizeProjectSheets_() {
+  SpreadsheetApp.getActiveSpreadsheet().getSheets()
+    .filter(isProjectSheet_)
+    .forEach(normalizeProjectSheet_);
+}
+
+function normalizeProjectSheet_(sheet) {
+  sheet.setFrozenRows(PROJECT_HEADER_ROW);
+  sheet.setHiddenGridlines(false);
+  sheet.hideColumns(1, PROJECT_SYSTEM_COLUMN_COUNT);
+
+  const reference = sheet.getParent().getSheetByName(PROJECT_FORMAT_REFERENCE_SHEET);
+  if (!reference || reference.getSheetId() === sheet.getSheetId()) return;
+  for (let column = 1; column <= sheet.getMaxColumns(); column += 1) {
+    sheet.setColumnWidth(column, reference.getColumnWidth(column));
+  }
+  for (let row = 1; row <= PROJECT_HEADER_ROW; row += 1) {
+    sheet.setRowHeight(row, reference.getRowHeight(row));
+  }
+}
+
+function fillProjectSystemColumns_(sheet, firstRow, lastRow) {
+  const rowCount = lastRow - firstRow + 1;
+  if (rowCount < 1) return;
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(20000);
+  try {
+    const values = sheet.getRange(firstRow, 1, rowCount, PROJECT_LAST_COLUMN).getValues();
+    const eventId = String(sheet.getRange('B3').getDisplayValue() || '').trim();
+    const eventName = String(sheet.getRange('A1').getDisplayValue() || '')
+      .replace(/^活動工作進度[｜|]\s*/, '')
+      .trim();
+    let nextNumber = getHighestTaskNumber_() + 1;
+    let changed = false;
+
+    values.forEach((row) => {
+      const hasWorkData = row.slice(3).some((value) => value !== '' && value !== null);
+      if (!hasWorkData) return;
+      if (!row[0]) row[0] = 'T-' + String(nextNumber++).padStart(3, '0');
+      if (row[1] !== eventId) row[1] = eventId;
+      if (row[2] !== eventName) row[2] = eventName;
+      changed = true;
+    });
+
+    if (changed) {
+      sheet.getRange(firstRow, 1, rowCount, PROJECT_SYSTEM_COLUMN_COUNT)
+        .setValues(values.map((row) => row.slice(0, PROJECT_SYSTEM_COLUMN_COUNT)));
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getHighestTaskNumber_() {
+  let highest = 0;
+  SpreadsheetApp.getActiveSpreadsheet().getSheets()
+    .filter(isProjectSheet_)
+    .forEach((sheet) => {
+      const lastRow = sheet.getLastRow();
+      if (lastRow < PROJECT_FIRST_DATA_ROW) return;
+      sheet.getRange(PROJECT_FIRST_DATA_ROW, 1, lastRow - PROJECT_FIRST_DATA_ROW + 1, 1)
+        .getDisplayValues()
+        .forEach((row) => {
+          const match = String(row[0] || '').match(/^T-(\d+)$/);
+          if (match) highest = Math.max(highest, Number(match[1]));
+        });
+    });
+  return highest;
+}
+
+function isProjectSheet_(sheet) {
+  return PROJECT_SHEET_NAME_PATTERN.test(sheet.getName());
+}
+
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Bridge')
     .setTitle('Project Pulse API')
@@ -357,4 +484,3 @@ function isoDateTime_(value) {
   const date = value instanceof Date ? value : new Date(value);
   return isNaN(date.getTime()) ? String(value) : Utilities.formatDate(date, 'Asia/Taipei', "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
-
