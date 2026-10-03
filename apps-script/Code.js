@@ -14,31 +14,66 @@ const PROJECT_FIRST_DATA_ROW = 7;
 const PROJECT_SYSTEM_COLUMN_COUNT = 3;
 const PROJECT_LAST_COLUMN = 23;
 const PROJECT_FORMAT_REFERENCE_SHEET = '013_國土署個資教育訓';
+const PROJECT_FORMAT_REFERENCE_BLANK_ROW = 14;
 
 /**
- * Keep every per-project sheet consistent when the workbook is opened.
- * The structural-change trigger installed by installProjectSheetAutomation()
- * also runs this immediately after a project sheet is created or renamed.
+ * Keep every per-project sheet's basic layout consistent when the workbook is
+ * opened. Authorized installable triggers handle full formatting and tables.
  */
 function onOpen() {
-  normalizeProjectSheets_();
+  SpreadsheetApp.getActiveSpreadsheet().getSheets()
+    .filter(isProjectSheet_)
+    .forEach(normalizeProjectSheetLayout_);
 }
 
 function installProjectSheetAutomation() {
-  const handler = 'onProjectStructureChange_';
+  const handlers = new Set([
+    'handleProjectSheetChange',
+    'handleProjectSheetOpen',
+    'handleProjectSheetEdit',
+  ]);
   ScriptApp.getProjectTriggers()
-    .filter((trigger) => trigger.getHandlerFunction() === handler)
+    .filter((trigger) => handlers.has(trigger.getHandlerFunction()))
     .forEach((trigger) => ScriptApp.deleteTrigger(trigger));
-  ScriptApp.newTrigger(handler)
-    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  ScriptApp.newTrigger('handleProjectSheetChange')
+    .forSpreadsheet(spreadsheet)
     .onChange()
     .create();
-  normalizeProjectSheets_();
-  return '專案分頁自動整理已啟用';
+  ScriptApp.newTrigger('handleProjectSheetOpen')
+    .forSpreadsheet(spreadsheet)
+    .onOpen()
+    .create();
+  ScriptApp.newTrigger('handleProjectSheetEdit')
+    .forSpreadsheet(spreadsheet)
+    .onEdit()
+    .create();
+  repairAllProjectSheets();
+  return '專案分頁格式、欄位與原生表格自動整理已啟用';
 }
 
-function onProjectStructureChange_() {
-  normalizeProjectSheets_();
+function handleProjectSheetOpen() {
+  repairAllProjectSheets();
+}
+
+function handleProjectSheetChange() {
+  repairAllProjectSheets();
+}
+
+function handleProjectSheetEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (!isProjectSheet_(sheet)) return;
+  normalizeProjectSheet_(sheet);
+  normalizeProjectNativeTables_([sheet]);
+}
+
+function repairAllProjectSheets() {
+  const projectSheets = SpreadsheetApp.getActiveSpreadsheet().getSheets()
+    .filter(isProjectSheet_);
+  projectSheets.forEach(normalizeProjectSheet_);
+  normalizeProjectNativeTables_(projectSheets);
+  return '所有專案分頁格式已完成同步';
 }
 
 /**
@@ -50,7 +85,7 @@ function onEdit(e) {
   const sheet = e.range.getSheet();
   if (!isProjectSheet_(sheet)) return;
 
-  normalizeProjectSheet_(sheet);
+  normalizeProjectSheetLayout_(sheet);
   if (e.range.getLastRow() < PROJECT_FIRST_DATA_ROW ||
       e.range.getColumn() > PROJECT_LAST_COLUMN ||
       e.range.getLastColumn() < 4) return;
@@ -60,25 +95,157 @@ function onEdit(e) {
   fillProjectSystemColumns_(sheet, firstRow, lastRow);
 }
 
-function normalizeProjectSheets_() {
-  SpreadsheetApp.getActiveSpreadsheet().getSheets()
-    .filter(isProjectSheet_)
-    .forEach(normalizeProjectSheet_);
-}
-
 function normalizeProjectSheet_(sheet) {
-  sheet.setFrozenRows(PROJECT_HEADER_ROW);
-  sheet.setHiddenGridlines(false);
-  sheet.hideColumns(1, PROJECT_SYSTEM_COLUMN_COUNT);
+  normalizeProjectSheetLayout_(sheet);
 
   const reference = sheet.getParent().getSheetByName(PROJECT_FORMAT_REFERENCE_SHEET);
-  if (!reference || reference.getSheetId() === sheet.getSheetId()) return;
+  if (!reference || reference.getSheetId() === sheet.getSheetId() ||
+      !needsProjectFormatRepair_(sheet)) return;
+
+  reference.getRange(1, 1, PROJECT_HEADER_ROW, PROJECT_LAST_COLUMN)
+    .copyFormatToRange(
+      sheet.getSheetId(),
+      1,
+      PROJECT_LAST_COLUMN,
+      1,
+      PROJECT_HEADER_ROW
+    );
+  reference.getRange(
+    PROJECT_FORMAT_REFERENCE_BLANK_ROW,
+    1,
+    1,
+    PROJECT_LAST_COLUMN
+  ).copyFormatToRange(
+    sheet.getSheetId(),
+    1,
+    PROJECT_LAST_COLUMN,
+    PROJECT_FIRST_DATA_ROW,
+    sheet.getMaxRows()
+  );
+
+  const validationTemplate = reference.getRange(
+    PROJECT_FORMAT_REFERENCE_BLANK_ROW,
+    1,
+    1,
+    PROJECT_LAST_COLUMN
+  ).getDataValidations()[0];
+  const validationRows = Array.from(
+    { length: sheet.getMaxRows() - PROJECT_HEADER_ROW },
+    () => validationTemplate.slice()
+  );
+  sheet.getRange(
+    PROJECT_FIRST_DATA_ROW,
+    1,
+    validationRows.length,
+    PROJECT_LAST_COLUMN
+  ).setDataValidations(validationRows);
+
+  const rules = reference.getConditionalFormatRules().map((rule) => {
+    const targetRanges = rule.getRanges().map((range) => sheet.getRange(
+      range.getRow(),
+      range.getColumn(),
+      range.getNumRows(),
+      range.getNumColumns()
+    ));
+    return rule.copy().setRanges(targetRanges).build();
+  });
+  sheet.setConditionalFormatRules(rules);
+
   for (let column = 1; column <= sheet.getMaxColumns(); column += 1) {
     sheet.setColumnWidth(column, reference.getColumnWidth(column));
   }
   for (let row = 1; row <= PROJECT_HEADER_ROW; row += 1) {
     sheet.setRowHeight(row, reference.getRowHeight(row));
   }
+}
+
+function normalizeProjectSheetLayout_(sheet) {
+  sheet.setFrozenRows(PROJECT_HEADER_ROW);
+  sheet.setHiddenGridlines(false);
+  sheet.hideColumns(1, PROJECT_SYSTEM_COLUMN_COUNT);
+}
+
+function needsProjectFormatRepair_(sheet) {
+  const validations = sheet.getRange(
+    PROJECT_FIRST_DATA_ROW,
+    4,
+    1,
+    8
+  ).getDataValidations()[0];
+  return [0, 2, 3, 6, 7].some((index) => !validations[index]);
+}
+
+function normalizeProjectNativeTables_(projectSheets) {
+  if (!projectSheets.length) return;
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const resource = Sheets.Spreadsheets.get(spreadsheet.getId(), {
+    fields: 'sheets(properties(sheetId,title),tables)',
+  });
+  const tablesBySheetId = {};
+  (resource.sheets || []).forEach((item) => {
+    tablesBySheetId[item.properties.sheetId] = item.tables || [];
+  });
+
+  const referenceSheet = spreadsheet.getSheetByName(PROJECT_FORMAT_REFERENCE_SHEET);
+  const referenceTable = referenceSheet
+    ? (tablesBySheetId[referenceSheet.getSheetId()] || [])[0]
+    : null;
+  const requests = [];
+
+  projectSheets.forEach((sheet) => {
+    const tableRange = getProjectTableRange_(sheet);
+    const tables = tablesBySheetId[sheet.getSheetId()] || [];
+    if (tables.length) {
+      requests.push({
+        updateTable: {
+          table: {
+            tableId: tables[0].tableId,
+            range: tableRange,
+          },
+          fields: 'range',
+        },
+      });
+      return;
+    }
+    if (!referenceTable) return;
+    requests.push({
+      addTable: {
+        table: {
+          name: 'Project_' + sheet.getSheetId(),
+          range: tableRange,
+          rowsProperties: referenceTable.rowsProperties,
+          columnProperties: referenceTable.columnProperties,
+        },
+      },
+    });
+  });
+
+  if (requests.length) {
+    Sheets.Spreadsheets.batchUpdate({ requests: requests }, spreadsheet.getId());
+  }
+}
+
+function getProjectTableRange_(sheet) {
+  const scanLastRow = Math.max(sheet.getLastRow(), PROJECT_FIRST_DATA_ROW);
+  const values = sheet.getRange(
+    PROJECT_FIRST_DATA_ROW,
+    4,
+    scanLastRow - PROJECT_HEADER_ROW,
+    PROJECT_LAST_COLUMN - 3
+  ).getDisplayValues();
+  let lastDataRow = PROJECT_FIRST_DATA_ROW;
+  values.forEach((row, index) => {
+    if (row.some((value) => value !== '')) {
+      lastDataRow = PROJECT_FIRST_DATA_ROW + index;
+    }
+  });
+  return {
+    sheetId: sheet.getSheetId(),
+    startRowIndex: PROJECT_HEADER_ROW - 1,
+    endRowIndex: lastDataRow,
+    startColumnIndex: 0,
+    endColumnIndex: PROJECT_LAST_COLUMN,
+  };
 }
 
 function fillProjectSystemColumns_(sheet, firstRow, lastRow) {
