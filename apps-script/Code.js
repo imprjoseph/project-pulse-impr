@@ -455,29 +455,82 @@ function login_(payload) {
 }
 
 function loginAndBootstrap_(payload) {
-  const login = login_(payload);
-  return Object.assign(
-    { token: login.token },
-    bootstrap_(login.viewer)
-  );
+  const account = String(payload.account || '').trim().toLowerCase();
+  const password = String(payload.password || '');
+  if (!account || !password) throw new Error('請輸入帳號與密碼');
+
+  const tables = batchTables_([SHEETS.accounts, SHEETS.projects, SHEETS.reports, SHEETS.worklogs]);
+  const accountTable = tables[SHEETS.accounts];
+  const rowIndex = accountTable.rows.findIndex((row) =>
+    String(row.login_account || '').trim().toLowerCase() === account);
+  if (rowIndex < 0) throw new Error('帳號或密碼錯誤');
+
+  const row = accountTable.rows[rowIndex];
+  if (row.status !== '啟用') throw new Error('此帳號目前無法登入');
+  const lockedUntil = row.locked_until ? new Date(row.locked_until) : null;
+  if (lockedUntil && lockedUntil.getTime() > Date.now()) throw new Error('帳號暫時鎖定，請稍後再試');
+  if (String(row.password || '') !== password) {
+    const attempts = Number(row.failed_attempts || 0) + 1;
+    const lockValue = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : '';
+    const accountSheet = sheet_(SHEETS.accounts);
+    accountSheet.getRange(rowIndex + 2, accountTable.headers.failed_attempts + 1).setValue(attempts);
+    accountSheet.getRange(rowIndex + 2, accountTable.headers.locked_until + 1).setValue(lockValue);
+    throw new Error(attempts >= 5 ? '密碼錯誤次數過多，帳號已鎖定 15 分鐘' : '帳號或密碼錯誤');
+  }
+  if (Number(row.failed_attempts || 0) > 0 || row.locked_until) {
+    const accountSheet = sheet_(SHEETS.accounts);
+    accountSheet.getRange(rowIndex + 2, accountTable.headers.failed_attempts + 1).setValue(0);
+    accountSheet.getRange(rowIndex + 2, accountTable.headers.locked_until + 1).setValue('');
+  }
+
+  const viewer = publicAccount_(row);
+  const token = Utilities.getUuid() + Utilities.getUuid();
+  const cache = CacheService.getScriptCache();
+  cache.put('session:' + token, JSON.stringify(viewer), SESSION_SECONDS);
+  cache.put('last-login:' + viewer.accountId, isoDateTime_(new Date()), SESSION_SECONDS);
+  return Object.assign({ token: token }, bootstrapFromTables_(viewer, tables));
 }
 
 function bootstrap_(viewer) {
   const tables = batchTables_([SHEETS.projects, SHEETS.reports, SHEETS.worklogs]);
+  return bootstrapFromTables_(viewer, tables);
+}
+
+function bootstrapFromTables_(viewer, tables) {
   const projects = tables[SHEETS.projects].rows.map(projectForClient_);
   const reports = tables[SHEETS.reports].rows
     .filter((row) => row.account_id === viewer.accountId)
     .sort((a, b) => String(b.week_start).localeCompare(String(a.week_start)))
     .slice(0, 8);
   const worklogs = tables[SHEETS.worklogs].rows;
-
+  const totalsByProject = {};
+  worklogs.forEach((row) => {
+    const projectId = row.project_id;
+    if (!projectId) return;
+    const totals = totalsByProject[projectId] || {
+      regularHours: 0,
+      overtimeHours: 0,
+      nextWeekHours: 0,
+      contributors: {},
+    };
+    totals.regularHours += Number(row.regular_hours || 0);
+    totals.overtimeHours += Number(row.overtime_hours || 0);
+    totals.nextWeekHours += Number(row.next_week_hours || 0);
+    if (row.account_id) totals.contributors[row.account_id] = true;
+    totalsByProject[projectId] = totals;
+  });
   const projectStats = projects.map((project) => {
-    const logs = worklogs.filter((row) => row.project_id === project.id);
+    const totals = totalsByProject[project.id] || {
+      regularHours: 0,
+      overtimeHours: 0,
+      nextWeekHours: 0,
+      contributors: {},
+    };
     return Object.assign({}, project, {
-      regularHours: sum_(logs, 'regular_hours'),
-      overtimeHours: sum_(logs, 'overtime_hours'),
-      nextWeekHours: sum_(logs, 'next_week_hours'),
-      contributorCount: new Set(logs.map((row) => row.account_id).filter(Boolean)).size,
+      regularHours: totals.regularHours,
+      overtimeHours: totals.overtimeHours,
+      nextWeekHours: totals.nextWeekHours,
+      contributorCount: Object.keys(totals.contributors).length,
     });
   });
 
@@ -591,6 +644,7 @@ function updateProject_(viewer, payload) {
 
 function listAccounts_(viewer) {
   requireAdmin_(viewer);
+  const cache = CacheService.getScriptCache();
   return table_(sheet_(SHEETS.accounts)).rows.map((row) => ({
     accountId: row.account_id,
     account: row.login_account,
@@ -600,7 +654,7 @@ function listAccounts_(viewer) {
     status: row.status,
     department: row.department,
     password: row.password,
-    lastLoginAt: isoDateTime_(row.last_login_at),
+    lastLoginAt: cache.get('last-login:' + row.account_id) || isoDateTime_(row.last_login_at),
     notes: row.notes || '',
   }));
 }
