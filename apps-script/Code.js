@@ -302,16 +302,30 @@ function isProjectSheet_(sheet) {
   return PROJECT_SHEET_NAME_PATTERN.test(sheet.getName());
 }
 
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.mode === 'poll') {
+    const requestId = String(e.parameter.requestId || '');
+    const callback = String(e.parameter.callback || '');
+    if (!/^[a-zA-Z_$][0-9a-zA-Z_$]{0,100}$/.test(callback) ||
+        !/^[0-9a-f-]{36}$/i.test(requestId)) {
+      return ContentService.createTextOutput('/* invalid poll request */')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    const cache = CacheService.getScriptCache();
+    const key = 'response:' + requestId;
+    const value = cache.get(key);
+    if (value) cache.remove(key);
+    return jsonp_(callback, value ? JSON.parse(value) : null);
+  }
   return HtmlService.createHtmlOutputFromFile('Bridge')
     .setTitle('Project Pulse API')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 /**
- * Receive GitHub Pages requests through a hidden form POST. Apps Script wraps
- * HtmlService pages in nested frames, so the response is sent to the top-level
- * portal instead of relying on a persistent iframe handshake.
+ * Receive GitHub Pages requests through a hidden form POST. The response is
+ * kept briefly in Script Cache and retrieved with a JSONP poll. This avoids
+ * Apps Script's nested iframe boundary without putting credentials in a URL.
  */
 function doPost(e) {
   const allowedOrigins = [
@@ -350,17 +364,27 @@ function doPost(e) {
     }
   }
 
-  const safeMessage = JSON.stringify(message)
+  if (/^[0-9a-f-]{36}$/i.test(requestId)) {
+    CacheService.getScriptCache().put(
+      'response:' + requestId,
+      JSON.stringify(message),
+      60
+    );
+  }
+  return HtmlService.createHtmlOutput(
+    '<!doctype html><meta charset="utf-8"><title>Project Pulse API</title>' +
+    '<p>Request completed.</p>'
+  ).setTitle('Project Pulse API')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function jsonp_(callback, value) {
+  const json = JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
-  const safeOrigin = JSON.stringify(origin || 'https://imprjoseph.github.io');
-  return HtmlService.createHtmlOutput(
-    '<!doctype html><meta charset="utf-8"><script>' +
-    'window.top.postMessage(' + safeMessage + ',' + safeOrigin + ');' +
-    '</script>'
-  ).setTitle('Project Pulse API')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return ContentService.createTextOutput(callback + '(' + json + ');')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
 function apiCall(request) {
