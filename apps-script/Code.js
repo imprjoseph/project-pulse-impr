@@ -303,6 +303,11 @@ function isProjectSheet_(sheet) {
 }
 
 function doGet(e) {
+  if (e && e.parameter && e.parameter.page === 'portal') {
+    return HtmlService.createHtmlOutputFromFile('Portal')
+      .setTitle('人力投入管理｜Project Pulse')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
   if (e && e.parameter && e.parameter.mode === 'poll') {
     const requestId = String(e.parameter.requestId || '');
     const callback = String(e.parameter.callback || '');
@@ -391,6 +396,7 @@ function apiCall(request) {
   if (!request || typeof request !== 'object') throw new Error('請求格式錯誤');
   const action = String(request.action || '');
   if (action === 'login') return login_(request.payload || {});
+  if (action === 'loginAndBootstrap') return loginAndBootstrap_(request.payload || {});
   const viewer = requireSession_(request.token);
   if (action === 'bootstrap') return bootstrap_(viewer);
   if (action === 'saveWeekly') return saveWeekly_(viewer, request.payload || {});
@@ -438,6 +444,14 @@ function login_(payload) {
   CacheService.getScriptCache().put('session:' + token, JSON.stringify(viewer), SESSION_SECONDS);
   audit_(viewer.accountId, viewer.displayName, '登入', '帳號', viewer.accountId, '成功', '');
   return { ok: true, token: token, viewer: viewer };
+}
+
+function loginAndBootstrap_(payload) {
+  const login = login_(payload);
+  return Object.assign(
+    { token: login.token },
+    bootstrap_(login.viewer)
+  );
 }
 
 function bootstrap_(viewer) {

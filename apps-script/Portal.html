@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#155d72">
+    <title>人力投入管理｜Project Pulse</title>
+    <link rel="icon" href="https://imprjoseph.github.io/project-pulse-impr/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://imprjoseph.github.io/project-pulse-impr/styles.css?v=3">
+  </head>
+  <body>
+    <main id="login-screen" class="login-shell">
+      <section class="login-card">
+        <div class="brand-mark" aria-hidden="true">◷</div>
+        <p class="eyebrow">PROJECT PULSE</p>
+        <h1>人力投入管理</h1>
+        <p class="login-copy">使用獨立帳號登入，回報每週工時、加班原因與工作卡點。</p>
+        <form id="login-form" class="stack">
+          <label>登入帳號<input id="login-account" name="account" autocomplete="username" required></label>
+          <label>密碼<input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+          <button class="button primary full" type="submit">登入</button>
+        </form>
+        <p id="login-message" class="form-message" role="status"></p>
+        <p class="security-note">帳密由公司 Google Sheet 後台管理，網站原始碼不含任何密碼。</p>
+      </section>
+    </main>
+
+    <div id="app" class="app hidden">
+      <header class="topbar">
+        <a class="brand" href="#dashboard" data-view="dashboard"><span class="brand-mark small">◷</span><span><b>人力投入管理</b><small>Project Pulse</small></span></a>
+        <nav id="main-nav" class="nav" aria-label="主要導覽">
+          <button data-view="dashboard" class="active">總覽</button>
+          <button data-view="weekly">我的週報</button>
+          <button data-view="projects">專案時數</button>
+          <button data-view="accounts" id="accounts-nav" class="hidden">帳號管理</button>
+        </nav>
+        <div class="viewer"><span><b id="viewer-name"></b><small id="viewer-role"></small></span><span id="viewer-avatar" class="avatar"></span><button id="logout" class="ghost">登出</button></div>
+      </header>
+
+      <main class="workspace">
+        <section id="view-dashboard" class="view"></section>
+        <section id="view-weekly" class="view hidden"></section>
+        <section id="view-projects" class="view hidden"></section>
+        <section id="view-accounts" class="view hidden"></section>
+      </main>
+      <nav class="mobile-nav" aria-label="行動版導覽">
+        <button data-view="dashboard">總覽</button><button data-view="weekly">週報</button><button data-view="projects">專案</button><button data-view="accounts" id="accounts-mobile" class="hidden">帳號</button>
+      </nav>
+      <div id="toast" class="toast hidden" role="status"></div>
+    </div>
+    <script src="https://imprjoseph.github.io/project-pulse-impr/app.js?v=5"></script>
+  </body>
+</html>
