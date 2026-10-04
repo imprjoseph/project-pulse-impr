@@ -725,7 +725,11 @@ function saveAccount_(viewer, payload) {
   const loginAccount = clean_(payload.account, 80).toLowerCase();
   const password = String(payload.password || '');
   const displayName = clean_(payload.displayName, 100);
+  const accountStatus = String(payload.status || '啟用');
+  const allowedAccountStatuses = ['啟用', '停用', '鎖定', '已離職'];
   if (!loginAccount || !password || !displayName) throw new Error('帳號、密碼與姓名為必填');
+  if (!allowedAccountStatuses.includes(accountStatus)) throw new Error('帳號狀態不正確');
+  if (accountStatus === '已離職') ensureAccountStatusValidation_(allowedAccountStatuses);
   const accountId = payload.accountId || ('USR-' + Utilities.getUuid().slice(0, 8).toUpperCase());
   const existing = table_(sheet_(SHEETS.accounts)).rows.find((row) =>
     String(row.login_account || '').toLowerCase() === loginAccount && row.account_id !== accountId);
@@ -736,7 +740,7 @@ function saveAccount_(viewer, payload) {
     display_name: displayName,
     email: clean_(payload.email, 160),
     role: payload.role || '一般同仁',
-    status: payload.status || '啟用',
+    status: accountStatus,
     department: clean_(payload.department, 100),
     password: password,
     updated_at: new Date(),
@@ -746,6 +750,19 @@ function saveAccount_(viewer, payload) {
   });
   audit_(viewer.accountId, viewer.displayName, '儲存帳號', '帳號', accountId, '成功', loginAccount);
   return { ok: true, accountId: accountId };
+}
+
+function ensureAccountStatusValidation_(statuses) {
+  const accountSheet = sheet_(SHEETS.accounts);
+  const data = table_(accountSheet);
+  const statusColumn = data.headers.status;
+  if (statusColumn === undefined) return;
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(statuses, true)
+    .setAllowInvalid(false)
+    .build();
+  accountSheet.getRange(2, statusColumn + 1, Math.max(accountSheet.getMaxRows() - 1, 1), 1)
+    .setDataValidation(rule);
 }
 
 function logout_(token, viewer) {
@@ -800,7 +817,9 @@ function sheet_(name) {
 }
 
 function batchTables_(sheetNames) {
-  const ranges = sheetNames.map((name) => "'" + name.replace(/'/g, "''") + "'!A:ZZ");
+  // Website tables use fewer than 26 columns. Limiting the range avoids
+  // scanning hundreds of empty columns on every login or manual refresh.
+  const ranges = sheetNames.map((name) => "'" + name.replace(/'/g, "''") + "'!A:Z");
   const response = Sheets.Spreadsheets.Values.batchGet(SPREADSHEET_ID, {
     ranges: ranges,
     valueRenderOption: 'FORMATTED_VALUE',

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#155d72">
     <title>人力投入管理｜Project Pulse</title>
     <link rel="icon" href="https://imprjoseph.github.io/project-pulse-impr/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="https://imprjoseph.github.io/project-pulse-impr/styles.css?v=5">
+    <link rel="stylesheet" href="https://imprjoseph.github.io/project-pulse-impr/styles.css?v=6">
   </head>
   <body>
     <main id="login-screen" class="login-shell">
@@ -35,7 +35,13 @@
           <button data-view="team" id="team-nav" class="hidden">團隊週報</button>
           <button data-view="accounts" id="accounts-nav" class="hidden">帳號管理</button>
         </nav>
-        <div class="viewer"><span><b id="viewer-name"></b><small id="viewer-role"></small></span><span id="viewer-avatar" class="avatar"></span><button id="logout" class="ghost">登出</button></div>
+        <div class="viewer">
+          <span class="sync-status"><b id="last-updated">尚未更新</b><small>僅按按鈕時讀取後台</small></span>
+          <button id="refresh-data" class="button secondary compact" type="button">更新資料</button>
+          <span class="viewer-info"><b id="viewer-name"></b><small id="viewer-role"></small></span>
+          <span id="viewer-avatar" class="avatar"></span>
+          <button id="logout" class="ghost">登出</button>
+        </div>
       </header>
 
       <main class="workspace">
@@ -50,6 +56,6 @@
       </nav>
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
-    <script src="https://imprjoseph.github.io/project-pulse-impr/app.js?v=11"></script>
+    <script src="https://imprjoseph.github.io/project-pulse-impr/app.js?v=12"></script>
   </body>
 </html>
