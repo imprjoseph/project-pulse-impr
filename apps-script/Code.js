@@ -400,6 +400,7 @@ function apiCall(request) {
   const viewer = requireSession_(request.token);
   if (action === 'bootstrap') return bootstrap_(viewer);
   if (action === 'saveWeekly') return saveWeekly_(viewer, request.payload || {});
+  if (action === 'teamWeekly') return teamWeekly_(viewer, request.payload || {});
   if (action === 'updateProject') return updateProject_(viewer, request.payload || {});
   if (action === 'listAccounts') return listAccounts_(viewer);
   if (action === 'saveAccount') return saveAccount_(viewer, request.payload || {});
@@ -583,6 +584,64 @@ function listAccounts_(viewer) {
     lastLoginAt: isoDateTime_(row.last_login_at),
     notes: row.notes || '',
   }));
+}
+
+function teamWeekly_(viewer, payload) {
+  requireAdmin_(viewer);
+  const weekStart = String(payload.weekStart || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) throw new Error('請選擇正確的週次');
+
+  const tables = batchTables_([SHEETS.accounts, SHEETS.reports, SHEETS.worklogs]);
+  const accounts = tables[SHEETS.accounts].rows.filter((row) => row.status === '啟用');
+  const reports = tables[SHEETS.reports].rows.filter((row) => isoDate_(row.week_start) === weekStart);
+  const worklogs = tables[SHEETS.worklogs].rows.filter((row) => isoDate_(row.week_start) === weekStart);
+  const reportMap = {};
+  reports.forEach((row) => { reportMap[row.account_id] = row; });
+
+  const members = accounts.map((account) => {
+    const report = reportMap[account.account_id];
+    const entries = worklogs.filter((row) => row.account_id === account.account_id).map((row) => ({
+      projectId: row.project_id || '',
+      projectName: row.project_name || '',
+      category: row.category || '',
+      taskName: row.task_name || '',
+      regularHours: Number(row.regular_hours || 0),
+      overtimeHours: Number(row.overtime_hours || 0),
+      overtimeReason: row.overtime_reason || '',
+      progress: row.progress || '',
+      difficultyType: row.difficulty_type || '無',
+      difficultyNote: row.difficulty_note || '',
+      supportNeeded: row.support_needed || '',
+      nextWeekHours: Number(row.next_week_hours || 0),
+    }));
+    return {
+      accountId: account.account_id,
+      displayName: account.display_name || account.login_account || '未命名',
+      email: account.email || '',
+      role: account.role || '一般同仁',
+      department: account.department || '',
+      submitted: Boolean(report),
+      highlights: report ? report.highlights || '' : '',
+      blockers: report ? report.blockers || '' : '',
+      nextWeekFocus: report ? report.next_week_focus || '' : '',
+      submittedAt: report ? isoDateTime_(report.submitted_at) : '',
+      updatedAt: report ? isoDateTime_(report.updated_at) : '',
+      regularHours: sum_(entries, 'regularHours'),
+      overtimeHours: sum_(entries, 'overtimeHours'),
+      nextWeekHours: sum_(entries, 'nextWeekHours'),
+      entries: entries,
+    };
+  }).sort((a, b) => a.displayName.localeCompare(b.displayName, 'zh-Hant'));
+
+  return {
+    weekStart: weekStart,
+    totalCount: members.length,
+    submittedCount: members.filter((member) => member.submitted).length,
+    regularHours: sum_(members, 'regularHours'),
+    overtimeHours: sum_(members, 'overtimeHours'),
+    nextWeekHours: sum_(members, 'nextWeekHours'),
+    members: members,
+  };
 }
 
 function saveAccount_(viewer, payload) {

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#155d72">
     <title>人力投入管理｜Project Pulse</title>
     <link rel="icon" href="https://imprjoseph.github.io/project-pulse-impr/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="https://imprjoseph.github.io/project-pulse-impr/styles.css?v=3">
+    <link rel="stylesheet" href="https://imprjoseph.github.io/project-pulse-impr/styles.css?v=4">
   </head>
   <body>
     <main id="login-screen" class="login-shell">
@@ -32,6 +32,7 @@
           <button data-view="dashboard" class="active">總覽</button>
           <button data-view="weekly">我的週報</button>
           <button data-view="projects">專案時數</button>
+          <button data-view="team" id="team-nav" class="hidden">團隊週報</button>
           <button data-view="accounts" id="accounts-nav" class="hidden">帳號管理</button>
         </nav>
         <div class="viewer"><span><b id="viewer-name"></b><small id="viewer-role"></small></span><span id="viewer-avatar" class="avatar"></span><button id="logout" class="ghost">登出</button></div>
@@ -41,13 +42,14 @@
         <section id="view-dashboard" class="view"></section>
         <section id="view-weekly" class="view hidden"></section>
         <section id="view-projects" class="view hidden"></section>
+        <section id="view-team" class="view hidden"></section>
         <section id="view-accounts" class="view hidden"></section>
       </main>
       <nav class="mobile-nav" aria-label="行動版導覽">
-        <button data-view="dashboard">總覽</button><button data-view="weekly">週報</button><button data-view="projects">專案</button><button data-view="accounts" id="accounts-mobile" class="hidden">帳號</button>
+        <button data-view="dashboard">總覽</button><button data-view="weekly">週報</button><button data-view="projects">專案</button><button data-view="team" id="team-mobile" class="hidden">團隊</button><button data-view="accounts" id="accounts-mobile" class="hidden">帳號</button>
       </nav>
       <div id="toast" class="toast hidden" role="status"></div>
     </div>
-    <script src="https://imprjoseph.github.io/project-pulse-impr/app.js?v=6"></script>
+    <script src="https://imprjoseph.github.io/project-pulse-impr/app.js?v=7"></script>
   </body>
 </html>
