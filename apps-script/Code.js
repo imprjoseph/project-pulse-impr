@@ -26,6 +26,11 @@ function onOpen() {
     .forEach(normalizeProjectSheetLayout_);
 }
 
+function ensureWeeklyReportColumns() {
+  ensureColumns_(SHEETS.reports, ['report_date', 'week_status', 'status_note']);
+  return '週報日期與週間狀態欄位已建立';
+}
+
 function installProjectSheetAutomation() {
   const handlers = new Set([
     'handleProjectSheetChange',
@@ -482,6 +487,9 @@ function bootstrap_(viewer) {
     reports: reports.map((row) => ({
       id: row.report_id,
       weekStart: isoDate_(row.week_start),
+      reportDate: isoDate_(row.report_date),
+      weekStatus: row.week_status || '無請假／出差',
+      statusNote: row.status_note || '',
       highlights: row.highlights || '',
       blockers: row.blockers || '',
       nextWeekFocus: row.next_week_focus || '',
@@ -492,9 +500,16 @@ function bootstrap_(viewer) {
 
 function saveWeekly_(viewer, payload) {
   const weekStart = String(payload.weekStart || '');
+  const reportDate = String(payload.reportDate || '');
+  const weekStatus = String(payload.weekStatus || '無請假／出差');
+  const allowedWeekStatuses = ['無請假／出差', '有請假', '有出差', '請假及出差'];
   const entries = Array.isArray(payload.entries) ? payload.entries : [];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !entries.length || entries.length > 30) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate) ||
+      !allowedWeekStatuses.includes(weekStatus) || !entries.length || entries.length > 30) {
     throw new Error('請確認週次與工項內容');
+  }
+  if (weekStatus !== '無請假／出差' && !String(payload.statusNote || '').trim()) {
+    throw new Error('請填寫請假或出差的日期與說明');
   }
   const projectRows = table_(sheet_(SHEETS.projects)).rows;
   const projectMap = {};
@@ -511,10 +526,14 @@ function saveWeekly_(viewer, payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    ensureWeeklyReportColumns();
     const reportId = viewer.accountId + ':' + weekStart;
     upsertByKey_(SHEETS.reports, 'report_id', reportId, {
       report_id: reportId,
       week_start: weekStart,
+      report_date: reportDate,
+      week_status: weekStatus,
+      status_note: clean_(payload.statusNote, 500),
       account_id: viewer.accountId,
       user_name: viewer.displayName,
       user_email: viewer.email,
@@ -621,6 +640,9 @@ function teamWeekly_(viewer, payload) {
       role: account.role || '一般同仁',
       department: account.department || '',
       submitted: Boolean(report),
+      reportDate: report ? isoDate_(report.report_date) : '',
+      weekStatus: report ? report.week_status || '無請假／出差' : '',
+      statusNote: report ? report.status_note || '' : '',
       highlights: report ? report.highlights || '' : '',
       blockers: report ? report.blockers || '' : '',
       nextWeekFocus: report ? report.next_week_focus || '' : '',
@@ -760,6 +782,14 @@ function table_(sheet) {
     return object;
   });
   return { names: names, headers: headers, rows: rows };
+}
+
+function ensureColumns_(sheetName, requiredNames) {
+  const sheet = sheet_(sheetName);
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const names = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0];
+  const missing = requiredNames.filter((name) => !names.includes(name));
+  if (missing.length) sheet.getRange(1, lastColumn + 1, 1, missing.length).setValues([missing]);
 }
 
 function appendObjects_(sheetName, objects) {
