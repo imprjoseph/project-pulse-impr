@@ -492,11 +492,15 @@ function loginAndBootstrap_(payload) {
 }
 
 function bootstrap_(viewer) {
-  const tables = batchTables_([SHEETS.projects, SHEETS.reports, SHEETS.worklogs]);
+  const tables = batchTables_([SHEETS.accounts, SHEETS.projects, SHEETS.reports, SHEETS.worklogs]);
   return bootstrapFromTables_(viewer, tables);
 }
 
 function bootstrapFromTables_(viewer, tables) {
+  const activePeople = tables[SHEETS.accounts].rows
+    .filter((row) => row.status === '啟用')
+    .map((row) => row.display_name || row.login_account)
+    .filter(Boolean);
   const projects = tables[SHEETS.projects].rows.map(projectForClient_);
   const reports = tables[SHEETS.reports].rows
     .filter((row) => row.account_id === viewer.accountId)
@@ -536,6 +540,7 @@ function bootstrapFromTables_(viewer, tables) {
 
   return {
     viewer: viewer,
+    activePeople: activePeople,
     projects: projectStats,
     reports: reports.map((row) => ({
       id: row.report_id,
