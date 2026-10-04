@@ -308,6 +308,61 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+/**
+ * Receive GitHub Pages requests through a hidden form POST. Apps Script wraps
+ * HtmlService pages in nested frames, so the response is sent to the top-level
+ * portal instead of relying on a persistent iframe handshake.
+ */
+function doPost(e) {
+  const allowedOrigins = [
+    'https://imprjoseph.github.io',
+    'https://project-pulse-impr.impr-joseph.chatgpt.site',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+  ];
+  const origin = String(e && e.parameter && e.parameter.origin || '');
+  const requestId = String(e && e.parameter && e.parameter.requestId || '');
+  let message;
+
+  if (allowedOrigins.indexOf(origin) < 0) {
+    message = {
+      type: 'PROJECT_PULSE_RESPONSE',
+      requestId: requestId,
+      ok: false,
+      error: '不允許的網站來源',
+    };
+  } else {
+    try {
+      const request = JSON.parse(String(e.parameter.request || '{}'));
+      message = {
+        type: 'PROJECT_PULSE_RESPONSE',
+        requestId: requestId,
+        ok: true,
+        result: apiCall(request),
+      };
+    } catch (error) {
+      message = {
+        type: 'PROJECT_PULSE_RESPONSE',
+        requestId: requestId,
+        ok: false,
+        error: error && error.message ? error.message : '後端服務暫時無法使用',
+      };
+    }
+  }
+
+  const safeMessage = JSON.stringify(message)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  const safeOrigin = JSON.stringify(origin || 'https://imprjoseph.github.io');
+  return HtmlService.createHtmlOutput(
+    '<!doctype html><meta charset="utf-8"><script>' +
+    'window.top.postMessage(' + safeMessage + ',' + safeOrigin + ');' +
+    '</script>'
+  ).setTitle('Project Pulse API')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
 function apiCall(request) {
   if (!request || typeof request !== 'object') throw new Error('請求格式錯誤');
   const action = String(request.action || '');

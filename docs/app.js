@@ -3,13 +3,15 @@ const categories=['合約行政','整體時程','視覺設計','網站報名','�
 const difficulties=['無','需求不清','等待客戶','等待廠商','跨部門協作','估時不足','人力不足','返工','技術問題','其他'];
 const overtimeReasons=['客戶臨時需求','需求或範圍變更','等待回覆後集中趕工','臨時插單','人力不足','原估時不足','重工／版本反覆','活動當日或進撤場','其他'];
 const projectStatuses=['規劃中','籌備中','執行準備','執行中','等待客戶','暫停','活動完成','驗收結案'];
+const API_URL='https://script.google.com/macros/s/AKfycbx_0KpQb3EuIA22WTfE2YlFYu2aku3Kop4XnOeF3sRsp_d2E6uoLhA6UhazizK6HGaQSA/exec';
 
 class BridgeClient{
-  constructor(frame){this.frame=frame;this.pending=new Map();this.ready=false;window.addEventListener('message',e=>this.receive(e));}
-  receive(event){if(event.source!==this.frame.contentWindow||!event.data)return;if(event.data.type==='PROJECT_PULSE_READY'){this.ready=true;return;}if(event.data.type!=='PROJECT_PULSE_RESPONSE')return;const item=this.pending.get(event.data.requestId);if(!item)return;this.pending.delete(event.data.requestId);event.data.ok?item.resolve(event.data.result):item.reject(new Error(event.data.error||'後端服務暫時無法使用'));}
-  async call(action,payload={}){for(let i=0;i<50&&!this.ready;i++)await new Promise(r=>setTimeout(r,100));if(!this.ready)throw new Error('後端服務尚未就緒，請重新整理後再試');const requestId=crypto.randomUUID();return new Promise((resolve,reject)=>{this.pending.set(requestId,{resolve,reject});setTimeout(()=>{if(this.pending.delete(requestId))reject(new Error('後端回應逾時，請稍後再試'));},30000);this.frame.contentWindow.postMessage({type:'PROJECT_PULSE_REQUEST',requestId,request:{action,payload,token:state.token}},'*');});}
+  constructor(endpoint){this.endpoint=endpoint;this.pending=new Map();window.addEventListener('message',e=>this.receive(e));}
+  receive(event){if(!event.data||event.data.type!=='PROJECT_PULSE_RESPONSE'||!this.isTrustedOrigin(event.origin))return;const item=this.pending.get(event.data.requestId);if(!item)return;this.pending.delete(event.data.requestId);clearTimeout(item.timer);item.frame.remove();event.data.ok?item.resolve(event.data.result):item.reject(new Error(event.data.error||'後端服務暫時無法使用'));}
+  isTrustedOrigin(origin){try{const host=new URL(origin).hostname;return host==='script.google.com'||host.endsWith('.script.googleusercontent.com');}catch{return false;}}
+  call(action,payload={}){const requestId=crypto.randomUUID();const frame=document.createElement('iframe');frame.name=`project-pulse-${requestId}`;frame.className='api-bridge';frame.title='資料服務';document.body.append(frame);const form=document.createElement('form');form.method='POST';form.action=this.endpoint;form.target=frame.name;form.className='hidden';const fields={origin:location.origin,requestId,request:JSON.stringify({action,payload,token:state.token})};Object.entries(fields).forEach(([name,value])=>{const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.append(input);});document.body.append(form);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{if(this.pending.delete(requestId)){frame.remove();reject(new Error('後端回應逾時，請稍後再試'));}},30000);this.pending.set(requestId,{resolve,reject,frame,timer});form.submit();form.remove();});}
 }
-const bridge=new BridgeClient(document.querySelector('#api-bridge'));
+const bridge=new BridgeClient(API_URL);
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 
 $('#login-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;$('#login-message').textContent='登入驗證中…';try{const result=await bridge.call('login',{account:$('#login-account').value,password:$('#login-password').value});state.token=result.token;state.viewer=result.viewer;sessionStorage.setItem('projectPulseToken',state.token);await loadApp();}catch(error){$('#login-message').textContent=error.message;}finally{button.disabled=false;}});
