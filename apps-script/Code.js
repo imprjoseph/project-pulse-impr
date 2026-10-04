@@ -435,9 +435,11 @@ function login_(payload) {
   }
 
   const now = new Date();
-  sheet.getRange(rowIndex + 2, data.headers.last_login_at + 1).setValue(now);
-  sheet.getRange(rowIndex + 2, data.headers.failed_attempts + 1).setValue(0);
-  sheet.getRange(rowIndex + 2, data.headers.locked_until + 1).clearContent();
+  const updatedRow = data.names.map((name) => row[name] === undefined ? '' : row[name]);
+  updatedRow[data.headers.last_login_at] = now;
+  updatedRow[data.headers.failed_attempts] = 0;
+  updatedRow[data.headers.locked_until] = '';
+  sheet.getRange(rowIndex + 2, 1, 1, updatedRow.length).setValues([updatedRow]);
 
   const viewer = publicAccount_(row);
   const token = Utilities.getUuid() + Utilities.getUuid();
@@ -455,12 +457,13 @@ function loginAndBootstrap_(payload) {
 }
 
 function bootstrap_(viewer) {
-  const projects = table_(sheet_(SHEETS.projects)).rows.map(projectForClient_);
-  const reports = table_(sheet_(SHEETS.reports)).rows
+  const tables = batchTables_([SHEETS.projects, SHEETS.reports, SHEETS.worklogs]);
+  const projects = tables[SHEETS.projects].rows.map(projectForClient_);
+  const reports = tables[SHEETS.reports].rows
     .filter((row) => row.account_id === viewer.accountId)
     .sort((a, b) => String(b.week_start).localeCompare(String(a.week_start)))
     .slice(0, 8);
-  const worklogs = table_(sheet_(SHEETS.worklogs)).rows;
+  const worklogs = tables[SHEETS.worklogs].rows;
 
   const projectStats = projects.map((project) => {
     const logs = worklogs.filter((row) => row.project_id === project.id);
@@ -652,10 +655,39 @@ function projectForClient_(row) {
   };
 }
 
+let spreadsheetCache_;
+
 function sheet_(name) {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(name);
+  if (!spreadsheetCache_) spreadsheetCache_ = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = spreadsheetCache_.getSheetByName(name);
   if (!sheet) throw new Error('找不到後台分頁：' + name);
   return sheet;
+}
+
+function batchTables_(sheetNames) {
+  const ranges = sheetNames.map((name) => "'" + name.replace(/'/g, "''") + "'!A:ZZ");
+  const response = Sheets.Spreadsheets.Values.batchGet(SPREADSHEET_ID, {
+    ranges: ranges,
+    valueRenderOption: 'FORMATTED_VALUE',
+  });
+  const valueRanges = response.valueRanges || [];
+  const result = {};
+  sheetNames.forEach((name, index) => {
+    result[name] = tableFromValues_((valueRanges[index] && valueRanges[index].values) || []);
+  });
+  return result;
+}
+
+function tableFromValues_(values) {
+  const names = (values[0] || []).map(String);
+  const headers = {};
+  names.forEach((name, index) => { if (name) headers[name] = index; });
+  const rows = values.slice(1).filter((row) => row.some((cell) => cell !== '')).map((row) => {
+    const object = {};
+    names.forEach((name, index) => { if (name) object[name] = row[index] === undefined ? '' : row[index]; });
+    return object;
+  });
+  return { names: names, headers: headers, rows: rows };
 }
 
 function table_(sheet) {
@@ -674,9 +706,9 @@ function table_(sheet) {
 function appendObjects_(sheetName, objects) {
   if (!objects.length) return;
   const sheet = sheet_(sheetName);
-  const data = table_(sheet);
-  const values = objects.map((object) => data.names.map((name) => object[name] === undefined ? '' : object[name]));
-  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, data.names.length).setValues(values);
+  const names = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const values = objects.map((object) => names.map((name) => object[name] === undefined ? '' : object[name]));
+  sheet.getRange(sheet.getLastRow() + 1, 1, values.length, names.length).setValues(values);
 }
 
 function upsertByKey_(sheetName, keyName, keyValue, object) {
