@@ -4,7 +4,7 @@ const difficulties=['無','需求不清','等待客戶','等待廠商','跨部�
 const overtimeReasons=['客戶臨時需求','需求或範圍變更','等待回覆後集中趕工','臨時插單','人力不足','原估時不足','重工／版本反覆','活動當日或進撤場','其他'];
 const weeklyStatuses=['無請假／出差','有請假','有出差','請假及出差'];
 const projectStatuses=['規劃中','籌備中','執行準備','執行中','等待客戶','暫停','活動完成','驗收結案'];
-const API_URL='https://script.google.com/macros/s/AKfycbx_0KpQb3EuIA22WTfE2YlFYu2aku3Kop4XnOeF3sRsp_d2E6uoLhA6UhazizK6HGaQSA/exec';
+const API_URL='https://script.google.com/macros/s/AKfycbxjIR1N2O5hNV14DIGoT0IkPENB8wLql7VRKPTzCrdy3yFgsO-nBJBj-EPgybLt8X9Y/exec';
 const DATA_CACHE_KEY='projectPulseSnapshotV2';
 
 class BridgeClient{
